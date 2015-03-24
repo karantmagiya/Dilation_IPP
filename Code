@@ -1,0 +1,91 @@
+//Group no : 6
+//Contact email : sgundecha@ufl.edu
+
+//Data precision(input and output) : 8 - bt unsigned array with binary values
+//Data size range : from 2x2 matrix to 2^15x2^15
+
+//Description of code : Implementing Image processing Dilate kernel using Intel IPP library.The kernel size is 3x3.
+//Randomly 100 selected elemnets are set to '1' value.
+//The kernel is then executed for 1000 times.And the kernel execution time is averaged over the 1000 values.
+
+#include <math.h>
+#include <memory>
+#include "base.h"
+#include "base_image.h"
+#include "base_ipp.h"
+#include "base_renderer.h"
+#include "time.h""
+#include "ippcore.h"
+#include "ipps.h"
+#include "ippi.h"
+#include "ippcv.h"
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <fstream>
+using namespace std;
+
+int main()
+{
+	ippStaticInit();
+	long double start_clock, stop_clock, t;
+	long double sum[15];
+	int p;
+	//ippSetNumThreads(2);	//Allows to set the number of threads (default = max supported by hardware)
+	
+	int mhz;
+	ippGetCpuFreqMhz(&mhz);	// Frequency obtained in mhz
+
+	int count = 0;
+	IppStatus status;
+	int z;
+	//const int e = 9;
+
+	for (int m = 2; m < 32779; m = m * 2)		// Varying data size in powers of 2
+	{
+		sum[count] = 0;
+		Ipp8u x[m * m];	// 8 bit unsigned int
+		IppiSize roi = {m, m};
+		ippiSet_8u_C1R(0, x, m, roi);	// all elements from 2x2 to 2^15x2^15 set to 0
+		
+		for (int i = 0; i < m; i++)	// m random elements of input data set to 1
+		{
+			z = rand() % (m * m);
+			x[z] = 1;
+		}
+
+		Ipp8u y[m * m];
+		ippiSet_8u_C1R(0, y, m, roi);
+		IppiMorphState *ppState1;
+		
+		Ipp8u kernel[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };	//structuring element initialisations
+		IppiSize kernelSize = { 3, 3 };
+		IppiPoint anchor = { 1, 1 };
+
+		status = ippiMorphologyInitAlloc_8u_C1R(roi.width, kernel, kernelSize, anchor, &ppState1);	// Allocates memory, initializes the morphology state structure and returns the pointer ppState to it.
+		
+		for (int i = 0; i < 1000; i++)
+		{
+			start_clock = ippGetCpuClocks();	// Time measurement start
+			status = ippiDilateBorderReplicate_8u_C1R(x, m, y, m, roi, ippBorderRepl, ppState1);
+			stop_clock = ippGetCpuClocks();		// Timing measurement stop
+			t = stop_clock - start_clock;
+			sum[count] = sum[count] + t;		// Sum updated on each run
+		}
+		sum[count] = ((sum[count] / mhz) / 1000);	// Final average computed and saved to an array location
+		
+		ippiMorphologyFree(ppState1);
+		count++;
+	}
+	ofstream file;
+	file.open("dilate_result.txt");
+	for (int i = 0; i < 15; i++)
+	{
+		file << "Average time taken for 2^" << i << " = " << sum[i] << endl;
+	}
+	file.close();
+	return 0;
+}
+
+//IppStatus ippiDilateBorderReplicate_<mod>(const Ipp<datatype>* pSrc, int srcStep, Ipp<datatype>* pDst, int dstStep, IppiSize roiSize, IppiBorderType borderType, IppiMorphState* pState)
+//http://scc.qibebt.cas.cn/docs/compiler/intel/2011/ipp/ipp_manual/IPPI/ippi_ch8/functn_DilateBorderReplicate.htm
